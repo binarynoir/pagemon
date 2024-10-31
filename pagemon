@@ -4,11 +4,11 @@
 # Description: Monitors specified websites for changes and sends notifications.
 # Author: John Smith III
 # License: MIT License
-# Version: 1.0.1
+# Version: 1.0.2
 # Date: 10-31-2024
 
 # Script version
-VERSION=1.0.1
+VERSION=1.0.2
 
 # Default configuration file location
 CONFIG_FILE="$HOME/.pagemonrc"
@@ -54,6 +54,31 @@ NC='\033[0m' # No Color
 # Define log levels
 declare -A LOG_LEVELS=(["FATAL"]=0 ["ERROR"]=1 ["WARN"]=2 ["INFO"]=3 ["DEBUG"]=4 ["TRACE"]=5)
 
+# Log messages to screen
+log_to_screen() {
+    local timestamp=$1
+    local log_level_name=$2
+    local message=$3
+    local output_message="$message"
+
+    [[ "$VERBOSE" = true ]] && output_message="$timestamp [$log_level_name] $message"
+
+    case $log_level_name in
+    "FATAL")
+        printf "${RED_BG}%s${NC}\n" "$output_message"
+        ;;
+    "ERROR")
+        printf "${RED}%s${NC}\n" "$output_message"
+        ;;
+    "WARN")
+        printf "${YELLOW}%s${NC}\n" "$output_message"
+        ;;
+    *)
+        printf "%s\n" "$output_message"
+        ;;
+    esac
+}
+
 # Log messages
 log() {
     local log_level_name=$1
@@ -75,30 +100,19 @@ log() {
         LOG_LEVEL=${LOG_LEVELS["INFO"]}
     fi
 
-    # Log to file
-    if [ "$log_level" -le "${LOG_LEVELS[$LOG_LEVEL]}" ]; then
-        printf "%s [%s] %s\n" "$timestamp" "$log_level_name" "$message" >>$LOG_FILE
+    # Log to file if it exists
+    if [ -f "$LOG_FILE" ]; then
+        if [ "$log_level" -le "${LOG_LEVELS[$LOG_LEVEL]}" ]; then
+            printf "%s [%s] %s\n" "$timestamp" "$log_level_name" "$message" >>$LOG_FILE
+        fi
+    else
+        # Print error to screen if log file does not exist
+        log_to_screen "$timestamp" "ERROR" "Error: Logfile does not exist: $LOG_FILE"
     fi
 
     # Print to screen
     if [ "$log_level" -le "${LOG_LEVELS[$LOG_LEVEL]}" ]; then
-        local output_message="$message"
-        [[ "$VERBOSE" = true ]] && output_message="$timestamp [$log_level_name] $message"
-
-        case $log_level_name in
-        "FATAL")
-            printf "${RED_BG}%s${NC}\n" "$output_message"
-            ;;
-        "ERROR")
-            printf "${RED}%s${NC}\n" "$output_message"
-            ;;
-        "WARN")
-            printf "${YELLOW}%s${NC}\n" "$output_message"
-            ;;
-        *)
-            printf "%s\n" "$output_message"
-            ;;
-        esac
+        log_to_screen "$timestamp" "$log_level_name" "$message"
     fi
 }
 
@@ -469,10 +483,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
     # General Options
     --help | -h)
-        SHOW_HELP=true
+        show_help
         ;;
     --version | -V)
-        SHOW_VERSION=true
+        show_version
         ;;
 
     # Configuration and Initialization
@@ -547,14 +561,13 @@ while [[ $# -gt 0 ]]; do
 
     # Process Management
     --killall | -K)
-        KILLALL=true
+        killall_script
         ;;
     --kill | -k)
-        KILL_PID="$2"
-        shift
+        kill_instance "$2"
         ;;
     --list-pids | -P)
-        LIST_PIDS=true
+        list_instances
         ;;
 
     # End of Options
@@ -568,13 +581,8 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
-# Execute actions based on parsed options
-process_options() {
-    [[ "$SHOW_HELP" = true ]] && show_help
-    [[ "$KILLALL" = true ]] && killall_script
-    [[ -n "$KILL_PID" ]] && kill_instance "$KILL_PID"
-    [[ "$LIST_PIDS" = true ]] && list_instances
-
+# Process and execute actions based on parsed options
+process_config_options() {
     load_config "$CONFIG_FILE"
 
     # Override config settings with command line options
@@ -590,8 +598,9 @@ process_options() {
     [[ -n "$CLI_LOG_FILE" ]] && LOG_FILE="$CLI_LOG_FILE"
     [[ -n "$CLI_LOG_LEVEL_OPTION" ]] && LOG_LEVEL_OPTION="$CLI_LOG_LEVEL_OPTION"
 
-    # Create the master cache directory if it doesn't exist
+    # Create the master cache directory and log file if they doesn't exist
     mkdir -p "$CACHE_DIR"
+    touch "$LOG_FILE"
 
     [[ "$CLEAN" = true ]] && delete_cache
     [[ "$SHOW_LOG" = true ]] && show_log
@@ -614,8 +623,8 @@ process_options() {
     [[ "$INIT" = true ]] && init_config
 }
 
-# Process all the cli options
-process_options
+# Process all the cli config options
+process_config_options
 
 # Convert interval to seconds
 INTERVAL_SECONDS=$((INTERVAL * 60))
