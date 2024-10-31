@@ -20,6 +20,19 @@ PageMon is a Bash script designed to monitor specified websites for changes and 
 
 ## Installation
 
+### Using Homebrew
+
+1. Tap the repository (if not already tapped):
+    ```bash
+    brew tap binarynoir/pagemon
+    ```
+
+2. Install PageMon:
+    ```bash
+    brew install pagemon
+    ```
+### Manual Installation
+
 1. Clone the repository:
     ```bash
     git clone https://github.com/binarynoir/pagemon.git
