@@ -60,3 +60,45 @@ Run the script with the desired options. Below are some examples:
 PageMon uses a configuration file to store default settings. The default location is `~/.pagemonrc`. You can initialize a configuration file with default settings using:
 ```bash
 ./pagemon --init
+```
+
+## Options
+
+- `-f, --url-file <file>`: Specify a file containing a list of URLs to monitor.
+- `-U, --list-urls`: List all watched URLs.
+- `-C, --clean`: Delete all cached files.
+- `-K, --killall`: Kill all running instances of the script.
+- `-L, --list`: List all running instances of the script.
+- `-k, --kill <pid>`: Kill a specific instance of the script by PID.
+- `-i, --interval <minutes>`: Set the interval between checks (default is 5 minutes).
+- `-c, --config <config_file>`: Specify a custom configuration file.
+- `-I, --init`: Initialize the configuration file.
+- `-s, --show-config`: Show the configuration settings.
+- `-b, --background`: Run the script in the background.
+- `-p, --pushover`: Send Pushover notifications.
+- `-a, --api-token <token>`: Specify the API token for Pushover notifications.
+- `-u, --user-key <key>`: Specify the user key for Pushover notifications.
+- `-d, --desktop`: Send desktop notifications using AppleScript.
+- `-v, --verbose`: Enable verbose output.
+- `-l, --log`: Log the log file to the screen.
+- `-o, --output <file>`: Specify a custom log file location.
+- `-L, --log-level <level>`: Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).
+- `-V, --version`: Display the script version.
+- `-h, --help`: Display the help message.
+
+## License
+
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+## Contributing
+
+Contributions are welcome! Please open an issue or submit a pull request for any improvements or bug fixes.
+
+## Author
+
+John Smith III
+
+## Acknowledgments
+
+Thanks to all contributors and users for their support and feedback.
+
