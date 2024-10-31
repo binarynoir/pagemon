@@ -29,6 +29,7 @@ PageMon is a Bash script designed to monitor specified websites for changes and 
    ```
 
 2. Install PageMon:
+
    ```bash
    brew install pagemon
    ```
@@ -91,6 +92,7 @@ Run the script with the desired options. Below are some examples:
   ```
 
 - Send Pushover notifications:
+
   ```bash
   ./pagemon -p -a YOUR_API_TOKEN -u YOUR_USER_KEY https://example.com
   ```
