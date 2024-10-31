@@ -1,0 +1,110 @@
+.TH PAGEMON 1 "October 2024" "Version 1.0" "PageMon Manual"
+.SH NAME
+pagemon \- Monitor specified websites for changes and send notifications
+
+.SH SYNOPSIS
+.B pagemon
+[\fIoptions\fR] [\fIurl\fR...]
+
+.SH DESCRIPTION
+.B PageMon
+is a Bash script designed to monitor specified websites for changes and send notifications. It supports various notification methods including Pushover and native desktop notifications.
+
+.SH OPTIONS
+.TP
+\fB-f\fR, \fB--url-file\fR \fIfile\fR
+Specify a file containing a list of URLs to monitor.
+.TP
+\fB-U\fR, \fB--list-urls\fR
+List all watched URLs.
+.TP
+\fB-C\fR, \fB--clean\fR
+Delete all cached files.
+.TP
+\fB-K\fR, \fB--killall\fR
+Kill all running instances of the script.
+.TP
+\fB-L\fR, \fB--list\fR
+List all running instances of the script.
+.TP
+\fB-k\fR, \fB--kill\fR \fIpid\fR
+Kill a specific instance of the script by PID.
+.TP
+\fB-i\fR, \fB--interval\fR \fIminutes\fR
+Set the interval between checks (default is 5 minutes).
+.TP
+\fB-c\fR, \fB--config\fR \fIconfig_file\fR
+Specify a custom configuration file.
+.TP
+\fB-I\fR, \fB--init\fR
+Initialize the configuration file.
+.TP
+\fB-s\fR, \fB--show-config\fR
+Show the configuration settings.
+.TP
+\fB-b\fR, \fB--background\fR
+Run the script in the background.
+.TP
+\fB-p\fR, \fB--pushover\fR
+Send Pushover notifications.
+.TP
+\fB-a\fR, \fB--api-token\fR \fItoken\fR
+Specify the API token for Pushover notifications.
+.TP
+\fB-u\fR, \fB--user-key\fR \fIkey\fR
+Specify the user key for Pushover notifications.
+.TP
+\fB-d\fR, \fB--desktop\fR
+Send desktop notifications using AppleScript.
+.TP
+\fB-v\fR, \fB--verbose\fR
+Enable verbose output.
+.TP
+\fB-l\fR, \fB--log\fR
+Log the log file to the screen.
+.TP
+\fB-o\fR, \fB--output\fR \fIfile\fR
+Specify a custom log file location.
+.TP
+\fB-L\fR, \fB--log-level\fR \fIlevel\fR
+Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).
+.TP
+\fB-V\fR, \fB--version\fR
+Display the script version.
+.TP
+\fB-h\fR, \fB--help\fR
+Display this help message.
+
+.SH CONFIGURATION
+PageMon uses a configuration file to store default settings. The default location is \fI~/.pagemonrc\fR. You can initialize a configuration file with default settings using:
+.P
+.B ./pagemon.txt --init
+
+.SH EXAMPLES
+.TP
+Monitor a single URL:
+.P
+.B ./pagemon.txt https://example.com
+.TP
+Monitor URLs from a file:
+.P
+.B ./pagemon.txt -f urls.txt
+.TP
+Run the script in the background:
+.P
+.B ./pagemon.txt -b https://example.com
+.TP
+Send Pushover notifications:
+.P
+.B ./pagemon.txt -p -a YOUR_API_TOKEN -u YOUR_USER_KEY https://example.com
+
+.SH AUTHOR
+John Smith III
+
+.SH LICENSE
+This project is licensed under the MIT License. See the LICENSE file for details.
+
+.SH SEE ALSO
+.BR curl (1),
+.BR xmllint (1),
+.BR jq (1)
