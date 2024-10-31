@@ -1,0 +1,585 @@
+#!/usr/bin/env bash
+
+# Script Name: PageMon
+# Description: Monitors specified websites for changes and sends notifications.
+# Author: John Smith III
+# License: MIT License
+# Version: 1.0
+# Date: 10-29-2024
+
+# Script version
+VERSION=1.0
+
+# Default configuration file location
+CONFIG_FILE="$HOME/.pagemonrc"
+
+# Default URL list file location
+DEFAULT_URL_FILE="$HOME/.pagemon_urls"
+
+# Master directory to store all cache files
+CACHE_DIR="/tmp/pagemon_cache"
+
+# Default log file location
+LOG_FILE="$CACHE_DIR/pagemon.log"
+
+# Default interval (in minutes)
+INTERVAL=5
+
+# Default running in the background
+BACKGROUND=false
+
+# Pushover notification options
+PUSHOVER=false
+API_TOKEN=
+USER_KEY=
+
+# Native desktop notification options
+DESKTOP=false
+
+# Verbose mode
+VERBOSE=false
+
+# Default log level
+LOG_LEVEL="INFO"
+
+# ANSI color codes
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+RED_BG='\033[41m'
+NC='\033[0m' # No Color
+
+# Define log levels
+declare -A LOG_LEVELS=(["FATAL"]=0 ["ERROR"]=1 ["WARN"]=2 ["INFO"]=3 ["DEBUG"]=4 ["TRACE"]=5)
+
+# Log messages
+log() {
+    local log_level_name=$1
+    local message=$2
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+
+    # Validate log level name
+    if [[ ! -v LOG_LEVELS[$log_level_name] ]]; then
+        printf "Invalid log level: %s. Setting to INFO.\n" "$log_level_name"
+        log_level_name="INFO"
+    fi
+
+    # Get the numeric log level
+    local log_level=${LOG_LEVELS[$log_level_name]}
+
+    # Validate current log level
+    if [[ ! -v LOG_LEVELS[$LOG_LEVEL] ]]; then
+        printf "Invalid current log level. Setting to INFO.\n"
+        LOG_LEVEL=${LOG_LEVELS["INFO"]}
+    fi
+
+    # Log to file
+    if [ "$log_level" -le "${LOG_LEVELS[$LOG_LEVEL]}" ]; then
+        printf "%s [%s] %s\n" "$timestamp" "$log_level_name" "$message" >>$LOG_FILE
+    fi
+
+    # Print to screen
+    if [ "$log_level" -le "${LOG_LEVELS[$LOG_LEVEL]}" ]; then
+        local output_message="$message"
+        [[ "$VERBOSE" = true ]] && output_message="$timestamp [$log_level_name] $message"
+
+        case $log_level_name in
+        "FATAL")
+            printf "${RED_BG}%s${NC}\n" "$output_message"
+            ;;
+        "ERROR")
+            printf "${RED}%s${NC}\n" "$output_message"
+            ;;
+        "WARN")
+            printf "${YELLOW}%s${NC}\n" "$output_message"
+            ;;
+        *)
+            printf "%s\n" "$output_message"
+            ;;
+        esac
+    fi
+}
+
+# Show help message
+show_help() {
+    printf "Usage: %s <url>... [options]\n" "$(basename "$0")"
+    printf "  -f, --url-file <file>       Specify a file containing a list of URLs to monitor. (default: %s)\n" "$DEFAULT_URL_FILE"
+    printf "  -U,--list-urls              List all watched URLs.\n"
+    printf "  -C, --clean                 Delete all cached files.\n"
+    printf "  -K, --killall               Kill all running instances of the script.\n"
+    printf "  -L, --list                  List all running instances of the script.\n"
+    printf "  -k, --kill <pid>            Kill a specific instance of the script by PID.\n"
+    printf "  -i, --interval <minutes>    Set the interval between checks (default is %d minutes).\n" "$INTERVAL"
+    printf "  -c, --config <config_file>  Specify a custom configuration file. (default: %s)\n" "$CONFIG_FILE"
+    printf "  -I, --init                  Initialize the configuration file.\n"
+    printf "  -s, --show-config           Show the configuration settings.\n"
+    printf "  -b, --background            Run the script in the background.\n"
+    printf "  -p, --pushover              Send Pushover notifications.\n"
+    printf "  -a, --api-token <token>     Specify the API token for Pushover notifications.\n"
+    printf "  -u, --user-key <key>        Specify the user key for Pushover notifications.\n"
+    printf "  -d, --desktop               Send desktop notifications using AppleScript.\n"
+    printf "  -v, --verbose               Enable verbose output.\n"
+    printf "  -l, --log                   Log the log file to the screen.\n"
+    printf "  -o, --output <file>         Specify a custom log file location.\n"
+    printf "  -L, --log-level <level>     Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).\n"
+    printf "  -V, --version               Display the script version.\n"
+    printf "  -h, --help                  Display this help message.\n"
+    printf "\n"
+    printf "PageMon version %s\n" "$VERSION"
+    exit 0
+}
+
+# Show version information
+show_version() {
+    log "INFO" "PageMon version $VERSION"
+    exit 0
+}
+
+# Show configuration information
+show_config() {
+    [ -n "$CONFIG_FILE" ] && log "INFO" "Configurtaion file: $CONFIG_FILE"
+    [ -n "$URL_FILE" ] && log "INFO" "URL file: $URL_FILE"
+    [ -n "$CACHE_DIR" ] && log "INFO" "Cache directory: $CACHE_DIR"
+    [ -n "$LOG_FILE" ] && log "INFO" "Log file: $LOG_FILE"
+    [ -n "$INTERVAL" ] && log "INFO" "Check interval: $INTERVAL min(s)"
+    [ -n "$BACKGROUND" ] && log "INFO" "Background: $BACKGROUND"
+    [ -n "$PUSHOVER" ] && log "INFO" "Pushover ebabled: $PUSHOVER"
+    [ -n "$DESKTOP" ] && log "INFO" "Desktop notification ebabled: $DESKTOP"
+    [ -n "$VERBOSE" ] && log "INFO" "Verbose ebabled: $VERBOSE"
+}
+
+# Show configuration file
+show_config_file() {
+    log "INFO" "Configuration file: $CONFIG_FILE"
+    log "INFO" ""
+    if [ -f "$CONFIG_FILE" ]; then
+        cat "$CONFIG_FILE"
+    else
+        log "INFO" "Configuration file not found: $CONFIG_FILE"
+    fi
+    log "INFO" ""
+    exit 0
+}
+
+# Show configuration file
+# TODO use this call
+show_urls() {
+    log "INFO" ""
+    log "INFO" "Monitoring the following URLs:"
+    for URL in "${URLS[@]}"; do
+        log "INFO" "  - $URL"
+    done
+    log "INFO" ""
+}
+
+# Delete all cached files
+delete_cache() {
+    local message1="Deleting all cached files..."
+    log "TRACE" "$message1"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message1"
+    rm -rf "$CACHE_DIR"
+    local message2="All cached files deleted."
+    log "TRACE" "$message2"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message2"
+    exit 0
+}
+
+# Check the website for changes
+check_website() {
+    local URL=$1
+    local ENCODED_URL=$(echo -n "$URL" | md5sum | awk '{print $1}')
+    local PREVIOUS_FILE="$CACHE_DIR/previous_content_$ENCODED_URL.txt"
+    local CURRENT_FILE="$CACHE_DIR/current_content_$ENCODED_URL.txt"
+    local NORMALIZED_FILE="$CACHE_DIR/normalized_content_$ENCODED_URL.txt"
+
+    # Fetch the current content of the website
+    if ! curl -s "$URL" >"$CURRENT_FILE"; then
+        log "ERROR" "Failed to fetch $URL"
+        return 1
+    fi
+
+    # Normalize the content
+    if ! normalize_content "$CURRENT_FILE" >"$NORMALIZED_FILE"; then
+        log "ERROR" "Failed to normalize content for $URL"
+        return 1
+    fi
+
+    # Check if the previous content file exists
+    if [ -f "$PREVIOUS_FILE" ]; then
+        # Compare the normalized current content with the previous content
+        if ! cmp -s "$NORMALIZED_FILE" "$PREVIOUS_FILE"; then
+            local MESSAGE="The website $URL has changed!"
+            log "WARN" "$MESSAGE"
+
+            # Send notifications based on user options
+            if [ "$PUSHOVER" = true ]; then
+                if ! send_pushover_notification "$MESSAGE"; then
+                    log "ERROR" "Failed to send Pushover notification for $URL"
+                fi
+            fi
+            if [ "$DESKTOP" = true ]; then
+                if ! send_desktop_notification "$MESSAGE"; then
+                    log "ERROR" "Failed to send desktop notification for $URL"
+                fi
+            fi
+        else
+            log "DEBUG" "No changes detected for $URL."
+        fi
+    else
+        log "DEBUG" "No previous content found for $URL. Saving current content."
+    fi
+
+    # Save the normalized current content for future comparison
+    mv "$NORMALIZED_FILE" "$PREVIOUS_FILE"
+    return 0
+}
+
+# Normalize HTML content
+normalize_content() {
+    local file=$1
+    # Remove scripts, styles, and ad-like elements, then extract main content
+    cat "$file" |
+        sed -E 's/<(script|style|footer|header)[^>]*>.*<\/\1>//g' |        # Remove scripts/styles
+        sed -E 's/<[^>]*class="[^"]*(ad|promo|timestamp)[^"]*"[^>]*>//g' | # Remove ad-like elements
+        sed -E 's/<[^>]*id="[^"]*(ad|promo|timestamp)[^"]*"[^>]*>//g' |
+        xmllint --html --xpath "//main" - 2>/dev/null | # Extract main content
+        # Remove HTML tags, comments, and extra whitespace
+        sed -e 's/<[^>]*>//g' -e 's/<!--.*-->//g' -e 's/[[:space:]]\+/ /g'
+}
+
+# Send a desktop notification
+send_desktop_notification() {
+    local MESSAGE=$1
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        osascript -e "display notification \"$MESSAGE\" with title \"Website Monitor\""
+    else
+        log "ERROR" "Desktop notifications are only supported on macOS."
+    fi
+}
+
+# Send a Pushover notification
+send_pushover_notification() {
+    local MESSAGE=$1
+    local RESPONSE
+    RESPONSE=$(curl -s \
+        --form-string "token=$API_TOKEN" \
+        --form-string "user=$USER_KEY" \
+        --form-string "message=$MESSAGE" \
+        https://api.pushover.net/1/messages.json)
+
+    if [[ $? -ne 0 ]]; then
+        log "ERROR" "Failed to send Pushover notification."
+        return 1
+    fi
+
+    local STATUS
+    STATUS=$(echo "$RESPONSE" | jq -r '.status')
+
+    if [[ "$STATUS" -ne 1 ]]; then
+        log "ERROR" "Pushover API returned an error: $RESPONSE"
+        return 1
+    fi
+
+    log "DEBUG" "Pushover notification sent successfully."
+    return 0
+}
+
+# Load configuration
+load_config() {
+    CONFIG_FILE="$1"
+    if [ -f "$CONFIG_FILE" ]; then
+        source "$CONFIG_FILE"
+    else
+        log "INFO" "Configuration file not found: $CONFIG_FILE"
+        exit 1
+    fi
+}
+
+init_config() {
+    # Create the configuration content
+    config_content=$(
+        cat <<EOF
+# PageMon Configuration File
+# This file contains the default settings for the PageMon script.
+
+# Script version
+VERSION=1.0
+
+# Default configuration file location
+CONFIG_FILE="$CONFIG_FILE"
+
+# Default URL list file location
+URL_FILE="$URL_FILE"
+
+# Master directory to store all cache files
+CACHE_DIR="$CACHE_DIR"
+
+# Default log file location
+LOG_FILE="$LOG_FILE"
+
+# Default interval (in minutes)
+INTERVAL=$INTERVAL
+
+# Default running in the background
+BACKGROUND=$BACKGROUND
+
+# Pushover notification options
+PUSHOVER=$PUSHOVER
+API_TOKEN="$API_TOKEN"
+USER_KEY="$USER_KEY"
+
+# Native desktop notification options
+DESKTOP=$DESKTOP
+
+# Verbose mode
+VERBOSE=$VERBOSE
+
+# Default log level
+LOG_LEVEL="$LOG_LEVEL"
+
+EOF
+    )
+
+    # Write the configuration content to the file
+    echo "$config_content" >"$CONFIG_FILE"
+    log "INFO" "Default configuration file created at $CONFIG_FILE"
+}
+
+# List all running instances of the script
+list_instances() {
+    local message="Listing all running instances of the script..."
+    log "TRACE" "$message"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message"
+    pgrep -fl "$(basename "$0")" | grep -v "inline-shell-completion"
+    exit 0
+}
+
+# Kill all running instances of the script
+killall_script() {
+    local message1="Killing all running instances of the script..."
+    log "TRACE" "$message1"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message1"
+    pkill -f "$(basename "$0")"
+    local message2="All running instances killed."
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message2"
+    log "TRACE" "$message2"
+    exit 0
+}
+
+# Kill a specific instance of the script
+kill_instance() {
+    local PID=$1
+    if [ -z "$PID" ]; then
+        local message="No PID provided. Usage: $(basename "$0") --kill <pid>"
+        log "TRACE" "$message"
+        [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message"
+        exit 1
+    fi
+    local message1="Killing instance with PID $PID..."
+    log "TRACE" "$message1"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message1"
+    kill "$PID"
+    local message2="Instance with PID $PID killed."
+    log "TRACE" "$message2"
+    [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message2"
+    exit 0
+}
+
+# Process URLs from a file
+process_url_file() {
+    local FILE=$1
+    if [ ! -f "$FILE" ]; then
+        log "INFO" "URL file not found: $FILE"
+        exit 1
+    fi
+    while IFS= read -r URL; do
+        URLS+=("$URL")
+    done <"$FILE"
+}
+
+# Process URLs
+process_urls() {
+    if [ ${#URLS[@]} -eq 0 ]; then
+        if [ -n "$URL_FILE" ]; then
+            process_url_file "$URL_FILE"
+        elif [ -f "$DEFAULT_URL_FILE" ]; then
+            process_url_file "$DEFAULT_URL_FILE"
+        elif [[ "$SHOW_CONFIG" = false && "$SHOW_CONFIG_FILE" = false ]]; then
+            log "INFO" "Usage: $(basename "$0") <website_url>... [options]"
+            log "INFO" "Try '$(basename "$0") --help' for more information."
+            exit 1
+        fi
+    fi
+}
+
+# log the log file to the screen
+show_log() {
+    if [ -f "$LOG_FILE" ]; then
+        cat "$LOG_FILE"
+    else
+        log "INFO" "Log file not found: $LOG_FILE"
+    fi
+    exit 0
+}
+
+# Check if URLs were provided as arguments
+URLS=()
+OPTIONS_PROCESSED=false
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --help | -h)
+        SHOW_HELP=true
+        ;;
+    --list-urls | -U)
+        SHOW_URL=true
+        ;;
+    --clean | -C)
+        CLEAN=true
+        ;;
+    --killall | -K)
+        KILLALL=true
+        ;;
+    --list | -L)
+        LIST=true
+        ;;
+    --kill | -k)
+        KILL_PID="$2"
+        shift
+        ;;
+    --url-file | -f)
+        CLI_URL_FILE="$2"
+        shift
+        ;;
+    --config | -c)
+        CONFIG_FILE="$2"
+        shift
+        ;;
+    --init | -I)
+        INIT=true
+        ;;
+    --interval | -i)
+        CLI_INTERVAL="$2"
+        shift
+        ;;
+    --background | -b)
+        CLI_BACKGROUND=true
+        ;;
+    --pushover | -p)
+        CLI_PUSHOVER=true
+        ;;
+    --api-token | -a)
+        CLI_API_TOKEN="$2"
+        shift
+        ;;
+    --user-key | -u)
+        CLI_USER_KEY="$2"
+        shift
+        ;;
+    --desktop | -d)
+        CLI_DESKTOP=true
+        ;;
+    --verbose | -v)
+        CLI_VERBOSE=true
+        ;;
+    --log | -l)
+        SHOW_LOG=true
+        ;;
+    --output | -o)
+        CLI_LOG_FILE="$2"
+        shift
+        ;;
+    --log-level | -L)
+        CLI_LOG_LEVEL_OPTION="$2"
+        shift
+        ;;
+    --version | -V)
+        SHOW_VERSION=true
+        ;;
+    --show-config | -s)
+        SHOW_CONFIG=true
+        ;;
+    --show-config-file | -S)
+        SHOW_CONFIG_FILE=true
+        ;;
+    --)
+        OPTIONS_PROCESSED=true
+        ;;
+    *)
+        URLS+=("$1")
+        ;;
+    esac
+    shift
+done
+
+# Execute actions based on parsed options
+process_options() {
+    [[ "$SHOW_HELP" = true ]] && show_help
+    [[ "$KILLALL" = true ]] && killall_script
+    [[ -n "$KILL_PID" ]] && kill_instance "$KILL_PID"
+    [[ "$LIST" = true ]] && list_instances
+
+    load_config "$CONFIG_FILE"
+
+    # Override config settings with command line options
+    [[ -n "$CLI_BACKGROUND" ]] && BACKGROUND="$CLI_BACKGROUND"
+    [[ -n "$CLI_PUSHOVER" ]] && PUSHOVER="$CLI_PUSHOVER"
+    [[ -n "$CLI_API_TOKEN" ]] && API_TOKEN="$CLI_API_TOKEN"
+    [[ -n "$CLI_USER_KEY" ]] && USER_KEY="$CLI_USER_KEY"
+    [[ -n "$CLI_VERBOSE" ]] && VERBOSE="$CLI_VERBOSE"
+    [[ -n "$CLI_DESKTOP" ]] && DESKTOP="$CLI_DESKTOP"
+    [[ -n "$CLI_URL_FILE" ]] && URL_FILE="$CLI_URL_FILE"
+    [[ -n "$CLI_INTERVAL" ]] && INTERVAL="$CLI_INTERVAL"
+    [[ -n "$CLI_LOG_FILE" ]] && LOG_FILE="$CLI_LOG_FILE"
+    [[ -n "$CLI_LOG_LEVEL_OPTION" ]] && LOG_LEVEL_OPTION="$CLI_LOG_LEVEL_OPTION"
+
+    # Create the master cache directory if it doesn't exist
+    mkdir -p "$CACHE_DIR"
+
+    [[ "$CLEAN" = true ]] && delete_cache
+    [[ "$SHOW_LOG" = true ]] && show_log
+
+    # Set log level if specified
+    if [[ -n "$LOG_LEVEL_OPTION" ]]; then
+        if [[ -n ${LOG_LEVELS[$LOG_LEVEL_OPTION]} ]]; then
+            LOG_LEVEL="$LOG_LEVEL_OPTION"
+        else
+            log "ERROR" "Invalid log level: $LOG_LEVEL_OPTION"
+            exit 1
+        fi
+    fi
+
+    process_urls
+
+    [[ "$SHOW_URL" = true ]] && show_urls && exit 0
+    [[ "$SHOW_CONFIG" = true ]] && show_config
+    [[ "$SHOW_CONFIG_FILE" = true ]] && show_config_file
+    [[ "$INIT" = true ]] && init_config
+}
+
+# Process all the cli options
+process_options
+
+# Convert interval to seconds
+INTERVAL_SECONDS=$((INTERVAL * 60))
+
+# Run the check in a loop
+run_check() {
+    log "INFO" ""
+    local datetime
+    datetime=$(date +"%Y-%m-%d %H:%M:%S")
+    log "INFO" "Starting: $datetime"
+    show_config
+    show_urls
+
+    while true; do
+        for URL in "${URLS[@]}"; do
+            check_website "$URL"
+        done
+        sleep "$INTERVAL_SECONDS"
+    done
+}
+
+if $BACKGROUND; then
+    run_check "${URLS[@]}" &>/dev/null &
+else
+    run_check "${URLS[@]}"
+fi
