@@ -25,6 +25,9 @@ LOG_FILE="$CACHE_DIR/pagemon.log"
 # Default interval (in minutes)
 INTERVAL=5
 
+# Default threshold percentage (higher is less sensitive)
+THRESHOLD=5
+
 # Default running in the background
 BACKGROUND=false
 
@@ -102,27 +105,48 @@ log() {
 # Show help message
 show_help() {
     printf "Usage: %s <url>... [options]\n" "$(basename "$0")"
-    printf "  -f, --url-file <file>       Specify a file containing a list of URLs to monitor. (default: %s)\n" "$DEFAULT_URL_FILE"
-    printf "  -U,--list-urls              List all watched URLs.\n"
-    printf "  -C, --clean                 Delete all cached files.\n"
-    printf "  -K, --killall               Kill all running instances of the script.\n"
-    printf "  -L, --list                  List all running instances of the script.\n"
-    printf "  -k, --kill <pid>            Kill a specific instance of the script by PID.\n"
-    printf "  -i, --interval <minutes>    Set the interval between checks (default is %d minutes).\n" "$INTERVAL"
-    printf "  -c, --config <config_file>  Specify a custom configuration file. (default: %s)\n" "$CONFIG_FILE"
-    printf "  -I, --init                  Initialize the configuration file.\n"
-    printf "  -s, --show-config           Show the configuration settings.\n"
-    printf "  -b, --background            Run the script in the background.\n"
-    printf "  -p, --pushover              Send Pushover notifications.\n"
-    printf "  -a, --api-token <token>     Specify the API token for Pushover notifications.\n"
-    printf "  -u, --user-key <key>        Specify the user key for Pushover notifications.\n"
-    printf "  -d, --desktop               Send desktop notifications using AppleScript.\n"
-    printf "  -v, --verbose               Enable verbose output.\n"
-    printf "  -l, --log                   Log the log file to the screen.\n"
-    printf "  -o, --output <file>         Specify a custom log file location.\n"
-    printf "  -L, --log-level <level>     Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).\n"
-    printf "  -V, --version               Display the script version.\n"
-    printf "  -h, --help                  Display this help message.\n"
+
+    # General Options
+    printf "\nGeneral Options:\n"
+    printf "  -h, --help                    Display this help message.\n"
+    printf "  -V, --version                 Display the script version.\n"
+
+    # Configuration and Initialization
+    printf "\nConfiguration and Initialization:\n"
+    printf "  -f, --url-file <file>         Specify a file containing a list of URLs to monitor. (default: %s)\n" "$DEFAULT_URL_FILE"
+    printf "  -i, --interval <minutes>      Set the interval between checks (default is %d minutes).\n" "$INTERVAL"
+    printf "  -t, --threshold <percentage>  Set the threshold percentage for detecting changes. Higher values mean fewer notifications for minor changes. (default: %d%%)\n" "$THRESHOLD"
+    printf "  -c, --config <config_file>    Specify a custom configuration file. (default: %s)\n" "$CONFIG_FILE"
+    printf "  -I, --init                    Initialize the configuration file.\n"
+    printf "  -s, --show-config             Show the configuration settings.\n"
+    printf "  -S, --show-config-file        Show the configuration file.\n"
+
+    # URL Management
+    printf "\nURL Management:\n"
+    printf "  -U, --list-urls               List all watched URLs.\n"
+    printf "  -C, --clean                   Delete all cached files.\n"
+
+    # Execution Options
+    printf "\nExecution Options:\n"
+    printf "  -b, --background              Run the script in the background.\n"
+    printf "  -p, --pushover                Send Pushover notifications.\n"
+    printf "  -a, --api-token <token>       Specify the API token for Pushover notifications.\n"
+    printf "  -u, --user-key <key>          Specify the user key for Pushover notifications.\n"
+    printf "  -d, --desktop                 Send desktop notifications using AppleScript.\n"
+
+    # Logging and Output
+    printf "\nLogging and Output:\n"
+    printf "  -v, --verbose                 Enable verbose output.\n"
+    printf "  -l, --log                     Log the log file to the screen.\n"
+    printf "  -o, --output <file>           Specify a custom log file location.\n"
+    printf "  -L, --log-level <level>       Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).\n"
+
+    # Process Management
+    printf "\nProcess Management:\n"
+    printf "  -K, --killall                 Kill all running instances of the script.\n"
+    printf "  -k, --kill <pid>              Kill a specific instance of the script by PID.\n"
+    printf "  -P, --list-pids               List all running instances of the script.\n"
+
     printf "\n"
     printf "PageMon version %s\n" "$VERSION"
     exit 0
@@ -190,6 +214,7 @@ check_website() {
     local PREVIOUS_FILE="$CACHE_DIR/previous_content_$ENCODED_URL.txt"
     local CURRENT_FILE="$CACHE_DIR/current_content_$ENCODED_URL.txt"
     local NORMALIZED_FILE="$CACHE_DIR/normalized_content_$ENCODED_URL.txt"
+    local HASH_FILE="$CACHE_DIR/hash_$ENCODED_URL.txt"
 
     # Fetch the current content of the website
     if ! curl -s "$URL" >"$CURRENT_FILE"; then
@@ -203,23 +228,37 @@ check_website() {
         return 1
     fi
 
-    # Check if the previous content file exists
-    if [ -f "$PREVIOUS_FILE" ]; then
-        # Compare the normalized current content with the previous content
-        if ! cmp -s "$NORMALIZED_FILE" "$PREVIOUS_FILE"; then
-            local MESSAGE="The website $URL has changed!"
-            log "WARN" "$MESSAGE"
+    # Generate hash of the normalized content
+    local CURRENT_HASH=$(md5sum "$NORMALIZED_FILE" | awk '{print $1}')
 
-            # Send notifications based on user options
-            if [ "$PUSHOVER" = true ]; then
-                if ! send_pushover_notification "$URL" "$MESSAGE"; then
-                    log "ERROR" "Failed to send Pushover notification for $URL"
+    # Check if the previous hash file exists
+    if [ -f "$HASH_FILE" ]; then
+        local PREVIOUS_HASH=$(cat "$HASH_FILE")
+
+        # Compare the hashes
+        if [ "$CURRENT_HASH" != "$PREVIOUS_HASH" ]; then
+            # Calculate the difference percentage
+            local DIFF_PERCENT=$(diff -U 0 "$PREVIOUS_FILE" "$NORMALIZED_FILE" | grep -v ^@ | wc -l)
+            local TOTAL_LINES=$(wc -l <"$NORMALIZED_FILE")
+            local CHANGE_PERCENT=$((DIFF_PERCENT * 100 / TOTAL_LINES))
+
+            if [ "$CHANGE_PERCENT" -ge "$THRESHOLD" ]; then
+                local MESSAGE="The website $URL has changed by $CHANGE_PERCENT%!"
+                log "WARN" "$MESSAGE"
+
+                # Send notifications based on user options
+                if [ "$PUSHOVER" = true ]; then
+                    if ! send_pushover_notification "$URL" "$MESSAGE"; then
+                        log "ERROR" "Failed to send Pushover notification for $URL"
+                    fi
                 fi
-            fi
-            if [ "$DESKTOP" = true ]; then
-                if ! send_desktop_notification "$MESSAGE"; then
-                    log "ERROR" "Failed to send desktop notification for $URL"
+                if [ "$DESKTOP" = true ]; then
+                    if ! send_desktop_notification "$MESSAGE"; then
+                        log "ERROR" "Failed to send desktop notification for $URL"
+                    fi
                 fi
+            else
+                log "DEBUG" "Changes detected for $URL are below the threshold ($CHANGE_PERCENT%)."
             fi
         else
             log "DEBUG" "No changes detected for $URL."
@@ -228,7 +267,8 @@ check_website() {
         log "DEBUG" "No previous content found for $URL. Saving current content."
     fi
 
-    # Save the normalized current content for future comparison
+    # Save the current hash and normalized content for future comparison
+    echo "$CURRENT_HASH" >"$HASH_FILE"
     mv "$NORMALIZED_FILE" "$PREVIOUS_FILE"
     return 0
 }
@@ -236,12 +276,13 @@ check_website() {
 # Normalize HTML content
 normalize_content() {
     local file=$1
-    # Remove scripts, styles, and ad-like elements, then extract main content
+    # Remove scripts, styles, ads, promos, and other dynamic content
     cat "$file" |
-        sed -E 's/<(script|style|footer|header)[^>]*>.*<\/\1>//g' |        # Remove scripts/styles
-        sed -E 's/<[^>]*class="[^"]*(ad|promo|timestamp)[^"]*"[^>]*>//g' | # Remove ad-like elements
-        sed -E 's/<[^>]*id="[^"]*(ad|promo|timestamp)[^"]*"[^>]*>//g' |
-        xmllint --html --xpath "//main" - 2>/dev/null | # Extract main content
+        sed -E 's/<(script|style|footer|header|aside|nav|iframe|noscript)[^>]*>.*<\/\1>//g' |                     # Remove scripts, styles, and other unwanted tags
+        sed -E 's/<[^>]*class="[^"]*(ad|promo|banner|sponsored|timestamp|footer|header|sidebar)[^"]*"[^>]*>//g' | # Remove ad-like elements by class
+        sed -E 's/<[^>]*id="[^"]*(ad|promo|banner|sponsored|timestamp|footer|header|sidebar)[^"]*"[^>]*>//g' |    # Remove ad-like elements by id
+        sed -E 's/<(div|span)[^>]*(ad|promo|banner|sponsored|timestamp|footer|header|sidebar)[^>]*>.*<\/\1>//g' | # Remove ad-like divs and spans
+        xmllint --html --xpath "//main|//article|//section" - 2>/dev/null |                                       # Extract main content
         # Remove HTML tags, comments, and extra whitespace
         sed -e 's/<[^>]*>//g' -e 's/<!--.*-->//g' -e 's/[[:space:]]\+/ /g'
 }
@@ -305,41 +346,37 @@ init_config() {
 # PageMon Configuration File
 # This file contains the default settings for the PageMon script.
 
-# Script version
-VERSION=1.0
-
+# General Settings
 # Default configuration file location
 CONFIG_FILE="$CONFIG_FILE"
-
 # Default URL list file location
 URL_FILE="$URL_FILE"
-
 # Master directory to store all cache files
 CACHE_DIR="$CACHE_DIR"
-
 # Default log file location
 LOG_FILE="$LOG_FILE"
 
+# Monitoring Settings
 # Default interval (in minutes)
 INTERVAL=$INTERVAL
-
+# Default threshold percentage (higher is less sensitive)
+THRESHOLD=$THRESHOLD  
 # Default running in the background
 BACKGROUND=$BACKGROUND
 
+# Notification Settings
 # Pushover notification options
 PUSHOVER=$PUSHOVER
 API_TOKEN="$API_TOKEN"
 USER_KEY="$USER_KEY"
-
 # Native desktop notification options
 DESKTOP=$DESKTOP
 
+# Logging Settings
 # Verbose mode
 VERBOSE=$VERBOSE
-
 # Default log level
 LOG_LEVEL="$LOG_LEVEL"
-
 EOF
     )
 
@@ -430,25 +467,15 @@ URLS=()
 OPTIONS_PROCESSED=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
+    # General Options
     --help | -h)
         SHOW_HELP=true
         ;;
-    --list-urls | -U)
-        SHOW_URL=true
+    --version | -V)
+        SHOW_VERSION=true
         ;;
-    --clean | -C)
-        CLEAN=true
-        ;;
-    --killall | -K)
-        KILLALL=true
-        ;;
-    --list | -L)
-        LIST=true
-        ;;
-    --kill | -k)
-        KILL_PID="$2"
-        shift
-        ;;
+
+    # Configuration and Initialization
     --url-file | -f)
         CLI_URL_FILE="$2"
         shift
@@ -464,6 +491,26 @@ while [[ $# -gt 0 ]]; do
         CLI_INTERVAL="$2"
         shift
         ;;
+    --threshold | -t)
+        CLI_THRESHOLD="$2"
+        shift
+        ;;
+    --show-config | -s)
+        SHOW_CONFIG=true
+        ;;
+    --show-config-file | -S)
+        SHOW_CONFIG_FILE=true
+        ;;
+
+    # URL Management
+    --list-urls | -U)
+        SHOW_URL=true
+        ;;
+    --clean | -C)
+        CLEAN=true
+        ;;
+
+    # Execution Options
     --background | -b)
         CLI_BACKGROUND=true
         ;;
@@ -481,6 +528,8 @@ while [[ $# -gt 0 ]]; do
     --desktop | -d)
         CLI_DESKTOP=true
         ;;
+
+    # Logging and Output
     --verbose | -v)
         CLI_VERBOSE=true
         ;;
@@ -495,15 +544,20 @@ while [[ $# -gt 0 ]]; do
         CLI_LOG_LEVEL_OPTION="$2"
         shift
         ;;
-    --version | -V)
-        SHOW_VERSION=true
+
+    # Process Management
+    --killall | -K)
+        KILLALL=true
         ;;
-    --show-config | -s)
-        SHOW_CONFIG=true
+    --kill | -k)
+        KILL_PID="$2"
+        shift
         ;;
-    --show-config-file | -S)
-        SHOW_CONFIG_FILE=true
+    --list-pids | -P)
+        LIST_PIDS=true
         ;;
+
+    # End of Options
     --)
         OPTIONS_PROCESSED=true
         ;;
@@ -519,7 +573,7 @@ process_options() {
     [[ "$SHOW_HELP" = true ]] && show_help
     [[ "$KILLALL" = true ]] && killall_script
     [[ -n "$KILL_PID" ]] && kill_instance "$KILL_PID"
-    [[ "$LIST" = true ]] && list_instances
+    [[ "$LIST_PIDS" = true ]] && list_instances
 
     load_config "$CONFIG_FILE"
 
@@ -532,6 +586,7 @@ process_options() {
     [[ -n "$CLI_DESKTOP" ]] && DESKTOP="$CLI_DESKTOP"
     [[ -n "$CLI_URL_FILE" ]] && URL_FILE="$CLI_URL_FILE"
     [[ -n "$CLI_INTERVAL" ]] && INTERVAL="$CLI_INTERVAL"
+    [[ -n "$CLI_THRESHOLD" ]] && THRESHOLD="$CLI_THRESHOLD"
     [[ -n "$CLI_LOG_FILE" ]] && LOG_FILE="$CLI_LOG_FILE"
     [[ -n "$CLI_LOG_LEVEL_OPTION" ]] && LOG_LEVEL_OPTION="$CLI_LOG_LEVEL_OPTION"
 

@@ -1,0 +1,12 @@
+# PageMon Configuration File
+CONFIG_FILE="./test_pagemonrc"
+URL_FILE="./test_urls.txt"
+CACHE_DIR="./test_cache"
+LOG_FILE="./test_pagemon.log"
+INTERVAL=1
+THRESHOLD=1
+BACKGROUND=false
+PUSHOVER=false
+DESKTOP=false
+VERBOSE=true
+LOG_LEVEL="DEBUG"
