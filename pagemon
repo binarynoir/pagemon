@@ -212,7 +212,7 @@ check_website() {
 
             # Send notifications based on user options
             if [ "$PUSHOVER" = true ]; then
-                if ! send_pushover_notification "$MESSAGE"; then
+                if ! send_pushover_notification "$URL" "$MESSAGE"; then
                     log "ERROR" "Failed to send Pushover notification for $URL"
                 fi
             fi
@@ -258,12 +258,16 @@ send_desktop_notification() {
 
 # Send a Pushover notification
 send_pushover_notification() {
-    local MESSAGE=$1
+    local URL=$1
+    local MESSAGE=$2
     local RESPONSE
     RESPONSE=$(curl -s \
         --form-string "token=$API_TOKEN" \
         --form-string "user=$USER_KEY" \
         --form-string "message=$MESSAGE" \
+        --form "url=$URL" \
+        --form "url_title=Visit Site" \
+        --form "priority=0" \
         https://api.pushover.net/1/messages.json)
 
     if [[ $? -ne 0 ]]; then
