@@ -1,2 +1,2 @@
 http://example.com
-http://example.org
+[10]http://example.org

@@ -8,6 +8,7 @@ PAGEMONSCRIPT="../pagemon"
 # Test URLs
 TEST_URL1="http://example.com"
 TEST_URL2="http://example.org"
+TEST_URL3="[10]http://example.net"
 
 # Configuration file for testing
 TEST_CONFIG_FILE="./test_pagemonrc"
@@ -71,7 +72,7 @@ run_test "List PIDs" "$PAGEMONSCRIPT --list-pids"
 # run_test "Kill specific PID" "$PAGEMONSCRIPT --kill 12345"
 
 # Run the main functionality
-run_test "Run main functionality" "$PAGEMONSCRIPT $TEST_URL1 $TEST_URL2"
+run_test "Run main functionality" "$PAGEMONSCRIPT $TEST_URL1 $TEST_URL2 $TEST_URL3"
 
 # Test logging functions
 run_test "Log FATAL message" "$PAGEMONSCRIPT --log-level FATAL && $PAGEMONSCRIPT --log"

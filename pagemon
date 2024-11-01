@@ -4,11 +4,11 @@
 # Description: Monitors specified websites for changes and sends notifications.
 # Author: John Smith III
 # License: MIT License
-# Version: 1.0.2
-# Date: 10-31-2024
+# Version: 1.1.0
+# Date: 11-01-2024
 
 # Script version
-VERSION=1.0.2
+VERSION=1.1.0
 
 # Default configuration file location
 CONFIG_FILE="$HOME/.pagemonrc"
@@ -119,56 +119,54 @@ log() {
 # Show help message
 show_help() {
     printf "Usage: %s <url>... [options]\n" "$(basename "$0")"
-
     # General Options
     printf "\nGeneral Options:\n"
-    printf "  -h, --help                    Display this help message.\n"
-    printf "  -V, --version                 Display the script version.\n"
-
+    printf "  -h, --help                Display this help message.\n"
+    printf "  -V, --version             Display the script version.\n"
     # Configuration and Initialization
     printf "\nConfiguration and Initialization:\n"
-    printf "  -f, --url-file <file>         Specify a file containing a list of URLs to monitor. (default: %s)\n" "$DEFAULT_URL_FILE"
-    printf "  -i, --interval <minutes>      Set the interval between checks (default is %d minutes).\n" "$INTERVAL"
-    printf "  -t, --threshold <percentage>  Set the threshold percentage for detecting changes. Higher values mean fewer notifications for minor changes. (default: %d%%)\n" "$THRESHOLD"
-    printf "  -c, --config <config_file>    Specify a custom configuration file. (default: %s)\n" "$CONFIG_FILE"
-    printf "  -I, --init                    Initialize the configuration file.\n"
-    printf "  -s, --show-config             Show the configuration settings.\n"
-    printf "  -S, --show-config-file        Show the configuration file.\n"
-
+    printf "  -i, --interval <minutes>  Set the interval between checks (default is %d minutes).\n" "$INTERVAL"
+    printf "  -t, --threshold <percentage> Set the threshold percentage for detecting changes. Higher values mean fewer notifications for minor changes. (default: %d%%)\n" "$THRESHOLD"
+    printf "  -c, --config <config_file> Specify a custom configuration file. (default: %s)\n" "$CONFIG_FILE"
+    printf "  -I, --init                Initialize the configuration file.\n"
+    printf "  -s, --show-config         Show the configuration settings.\n"
+    printf "  -S, --show-config-file    Show the configuration file.\n"
     # URL Management
     printf "\nURL Management:\n"
-    printf "  -U, --list-urls               List all watched URLs.\n"
-    printf "  -C, --clean                   Delete all cached files.\n"
-
+    printf "  -f, --url-file <file>     Specify a file containing a list of URLs to monitor. (default: %s)\n" "$DEFAULT_URL_FILE"
+    printf "  -U, --list-urls           List all watched URLs.\n"
+    printf "  -C, --clean               Delete all cached files.\n"
     # Execution Options
     printf "\nExecution Options:\n"
-    printf "  -b, --background              Run the script in the background.\n"
-    printf "  -p, --pushover                Send Pushover notifications.\n"
-    printf "  -a, --api-token <token>       Specify the API token for Pushover notifications.\n"
-    printf "  -u, --user-key <key>          Specify the user key for Pushover notifications.\n"
-    printf "  -d, --desktop                 Send desktop notifications using AppleScript.\n"
-
+    printf "  -b, --background          Run the script in the background.\n"
+    printf "  -p, --pushover            Send Pushover notifications.\n"
+    printf "  -a, --api-token <token>   Specify the API token for Pushover notifications.\n"
+    printf "  -u, --user-key <key>      Specify the user key for Pushover notifications.\n"
+    printf "  -d, --desktop             Send desktop notifications using AppleScript.\n"
     # Logging and Output
     printf "\nLogging and Output:\n"
-    printf "  -v, --verbose                 Enable verbose output.\n"
-    printf "  -l, --log                     Log the log file to the screen.\n"
-    printf "  -o, --output <file>           Specify a custom log file location.\n"
-    printf "  -L, --log-level <level>       Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).\n"
+    printf "  -v, --verbose             Enable verbose output.\n"
+    printf "  -l, --log                 Log the log file to the screen.\n"
+    printf "  -o, --output <file>       Specify a custom log file location.\n"
+    printf "  -L, --log-level <level>   Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).\n"
 
     # Process Management
     printf "\nProcess Management:\n"
-    printf "  -K, --killall                 Kill all running instances of the script.\n"
-    printf "  -k, --kill <pid>              Kill a specific instance of the script by PID.\n"
-    printf "  -P, --list-pids               List all running instances of the script.\n"
+    printf "  -K, --killall             Kill all running instances of the script.\n"
+    printf "  -k, --kill <pid>          Kill a specific instance of the script by PID.\n"
+    printf "  -P, --list-pids           List all running instances of the script.\n"
 
+    # URL Threshold Prefix
+    printf "\nURL Threshold Prefix:\n"
+    printf "  [INT]<url>                Specify a threshold for a specific URL. This overrides the global threshold setting.\n"
     printf "\n"
-    printf "PageMon version %s\n" "$VERSION"
+    show_version
     exit 0
 }
 
 # Show version information
 show_version() {
-    log "INFO" "PageMon version $VERSION"
+    printf "PageMon version: %s\n" "$VERSION"
     exit 0
 }
 
@@ -223,67 +221,94 @@ delete_cache() {
 
 # Check the website for changes
 check_website() {
-    local URL=$1
-    local ENCODED_URL=$(echo -n "$URL" | md5sum | awk '{print $1}')
-    local PREVIOUS_FILE="$CACHE_DIR/previous_content_$ENCODED_URL.txt"
-    local CURRENT_FILE="$CACHE_DIR/current_content_$ENCODED_URL.txt"
-    local NORMALIZED_FILE="$CACHE_DIR/normalized_content_$ENCODED_URL.txt"
-    local HASH_FILE="$CACHE_DIR/hash_$ENCODED_URL.txt"
+    local website_url=$1
+    local prefixed_threshold=$(echo "$website_url" | awk -F'[][]' '{print $2}')
+    local applied_threshold=${prefixed_threshold:-$THRESHOLD}
+    local clean_url=$(echo "$website_url" | sed 's/^\[[0-9]*\]//')
+    local encoded_url=$(echo -n "$clean_url" | md5sum | awk '{print $1}')
+    local previous_file="$CACHE_DIR/previous_content_$encoded_url.txt"
+    local current_file="$CACHE_DIR/current_content_$encoded_url.txt"
+    local normalized_file="$CACHE_DIR/normalized_content_$encoded_url.txt"
+    local hash_file="$CACHE_DIR/hash_$encoded_url.txt"
+
+    log "DEBUG" "Website URL: $website_url"
+    log "DEBUG" "Clean URL: $clean_url"
+    log "DEBUG" "Global threshold: $THRESHOLD"
+    log "DEBUG" "Prefix threshold: $prefixed_threshold"
+    log "DEBUG" "Applied threshold: $applied_threshold"
 
     # Fetch the current content of the website
-    if ! curl -s "$URL" >"$CURRENT_FILE"; then
-        log "ERROR" "Failed to fetch $URL"
+    if ! curl -s "$clean_url" >"$current_file"; then
+        log "ERROR" "Failed to fetch $clean_url"
         return 1
     fi
 
     # Normalize the content
-    if ! normalize_content "$CURRENT_FILE" >"$NORMALIZED_FILE"; then
-        log "ERROR" "Failed to normalize content for $URL"
+    if ! normalize_content "$current_file" >"$normalized_file"; then
+        log "ERROR" "Failed to normalize content for $clean_url"
         return 1
     fi
 
     # Generate hash of the normalized content
-    local CURRENT_HASH=$(md5sum "$NORMALIZED_FILE" | awk '{print $1}')
+    local current_hash=$(md5sum "$normalized_file" | awk '{print $1}')
 
     # Check if the previous hash file exists
-    if [ -f "$HASH_FILE" ]; then
-        local PREVIOUS_HASH=$(cat "$HASH_FILE")
+    if [ -f "$hash_file" ]; then
+        local previous_hash=$(cat "$hash_file")
 
         # Compare the hashes
-        if [ "$CURRENT_HASH" != "$PREVIOUS_HASH" ]; then
+        if [ "$current_hash" != "$previous_hash" ]; then
             # Calculate the difference percentage
-            local DIFF_PERCENT=$(diff -U 0 "$PREVIOUS_FILE" "$NORMALIZED_FILE" | grep -v ^@ | wc -l)
-            local TOTAL_LINES=$(wc -l <"$NORMALIZED_FILE")
-            local CHANGE_PERCENT=$((DIFF_PERCENT * 100 / TOTAL_LINES))
-
-            if [ "$CHANGE_PERCENT" -ge "$THRESHOLD" ]; then
-                local MESSAGE="The website $URL has changed by $CHANGE_PERCENT%!"
-                log "WARN" "$MESSAGE"
-
-                # Send notifications based on user options
-                if [ "$PUSHOVER" = true ]; then
-                    if ! send_pushover_notification "$URL" "$MESSAGE"; then
-                        log "ERROR" "Failed to send Pushover notification for $URL"
-                    fi
+            if [ -f "$previous_file" ]; then
+                local diff_percent=$(diff -U 0 "$previous_file" "$normalized_file" | grep -v ^@ | wc -l)
+                local total_lines=$(wc -l <"$normalized_file")
+                local change_percent=0
+                if [ "$total_lines" -ne 0 ]; then
+                    change_percent=$((diff_percent * 100 / total_lines))
                 fi
-                if [ "$DESKTOP" = true ]; then
-                    if ! send_desktop_notification "$MESSAGE"; then
-                        log "ERROR" "Failed to send desktop notification for $URL"
+
+                # Ensure change_percent is not null or empty
+                if [ -z "$change_percent" ] || [ "$change_percent" = "" ]; then
+                    change_percent=0
+                fi
+
+                log "DEBUG" "Total lines: $total_lines"
+                log "DEBUG" "Change percent: $change_percent%"
+
+                # Ensure both variables are integers before comparison
+                if [ "$change_percent" -ge "$applied_threshold" ] 2>/dev/null; then
+                    local message="The website $clean_url has changed by $change_percent%!"
+                    log "WARN" "$message"
+
+                    # Send notifications based on user options
+                    if [ "$PUSHOVER" = true ]; then
+                        log "DEBUG" "Processing Pushover notification: $clean_url"
+                        if ! send_pushover_notification "$clean_url" "$message"; then
+                            log "ERROR" "Failed to send Pushover notification for $clean_url"
+                        fi
                     fi
+                    if [ "$DESKTOP" = true ]; then
+                        if ! send_desktop_notification "$message"; then
+                            log "ERROR" "Failed to send desktop notification for $clean_url"
+                        fi
+                    fi
+                else
+                    log "DEBUG" "Changes detected for $clean_url are below the threshold ($change_percent%)."
                 fi
             else
-                log "DEBUG" "Changes detected for $URL are below the threshold ($CHANGE_PERCENT%)."
+                log "DEBUG" "No previous content found for $clean_url. Saving current content."
             fi
         else
-            log "DEBUG" "No changes detected for $URL."
+            log "DEBUG" "Change percent: 0%"
+            log "DEBUG" "No changes detected for $clean_url."
         fi
     else
-        log "DEBUG" "No previous content found for $URL. Saving current content."
+        log "DEBUG" "No previous content found for $clean_url. Saving current content."
     fi
 
     # Save the current hash and normalized content for future comparison
-    echo "$CURRENT_HASH" >"$HASH_FILE"
-    mv "$NORMALIZED_FILE" "$PREVIOUS_FILE"
+    echo "$current_hash" >"$hash_file"
+    mv "$normalized_file" "$previous_file"
     return 0
 }
 
@@ -303,9 +328,9 @@ normalize_content() {
 
 # Send a desktop notification
 send_desktop_notification() {
-    local MESSAGE=$1
+    local message=$1
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        osascript -e "display notification \"$MESSAGE\" with title \"Website Monitor\""
+        osascript -e "display notification \"$message\" with title \"Website Monitor\""
     else
         log "ERROR" "Desktop notifications are only supported on macOS."
     fi
@@ -313,14 +338,19 @@ send_desktop_notification() {
 
 # Send a Pushover notification
 send_pushover_notification() {
-    local URL=$1
-    local MESSAGE=$2
-    local RESPONSE
-    RESPONSE=$(curl -s \
+    local website_url=$1
+    local message=$2
+    local response
+
+    log "DEBUG" "Pushover Notification"
+    log "DEBUG" "Url: $website_url"
+    log "DEBUG" "Mesaage: $message"
+
+    response=$(curl -s \
         --form-string "token=$API_TOKEN" \
         --form-string "user=$USER_KEY" \
-        --form-string "message=$MESSAGE" \
-        --form "url=$URL" \
+        --form-string "message=$message" \
+        --form "url=$website_url" \
         --form "url_title=Visit Site" \
         --form "priority=0" \
         https://api.pushover.net/1/messages.json)
@@ -330,11 +360,11 @@ send_pushover_notification() {
         return 1
     fi
 
-    local STATUS
-    STATUS=$(echo "$RESPONSE" | jq -r '.status')
+    local status
+    status=$(echo "$response" | jq -r '.status')
 
-    if [[ "$STATUS" -ne 1 ]]; then
-        log "ERROR" "Pushover API returned an error: $RESPONSE"
+    if [[ "$status" -ne 1 ]]; then
+        log "ERROR" "Pushover API returned an error: $response"
         return 1
     fi
 
@@ -422,18 +452,18 @@ killall_script() {
 
 # Kill a specific instance of the script
 kill_instance() {
-    local PID=$1
-    if [ -z "$PID" ]; then
+    local pid=$1
+    if [ -z "$pid" ]; then
         local message="No PID provided. Usage: $(basename "$0") --kill <pid>"
         log "TRACE" "$message"
         [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message"
         exit 1
     fi
-    local message1="Killing instance with PID $PID..."
+    local message1="Killing instance with PID $pid..."
     log "TRACE" "$message1"
     [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message1"
-    kill "$PID"
-    local message2="Instance with PID $PID killed."
+    kill "$pid"
+    local message2="Instance with PID $pid killed."
     log "TRACE" "$message2"
     [ "${LOG_LEVELS[$LOG_LEVEL]}" -ne "${LOG_LEVELS["TRACE"]}" ] && printf "%s\n" "$message2"
     exit 0
@@ -441,14 +471,14 @@ kill_instance() {
 
 # Process URLs from a file
 process_url_file() {
-    local FILE=$1
-    if [ ! -f "$FILE" ]; then
-        log "INFO" "URL file not found: $FILE"
+    local file=$1
+    if [ ! -f "$file" ]; then
+        log "INFO" "URL file not found: $file"
         exit 1
     fi
     while IFS= read -r URL; do
         URLS+=("$URL")
-    done <"$FILE"
+    done <"$file"
 }
 
 # Process URLs

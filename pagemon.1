@@ -1,34 +1,29 @@
-.TH PAGEMON 1 "October 2024" "Version 1.0.2" "PageMon Manual"
+.TH PAGEMON 1 "November 2024" "Version 1.1.0" "PageMon Manual"
 .SH NAME
 PageMon \- Monitors specified websites for changes and sends notifications.
 
 .SH SYNOPSIS
 .B pagemon
-[\fIurl\fR...] [\fIoptions\fR]
+.RI [ options ] " <url>..."
 
 .SH DESCRIPTION
 .B PageMon
-is a script that monitors specified websites for changes and sends notifications when changes are detected.
+is a script that monitors specified websites for changes and sends notifications based on user-defined thresholds.
 
 .SH OPTIONS
+
+.SS General Options
 .TP
 .B \-h, \--help
 Display this help message.
 .TP
 .B \-V, \--version
 Display the script version.
+
+.SS Configuration and Initialization
 .TP
-.B \-f, \--url-file \fIfile\fR
-Specify a file containing a list of URLs to monitor. (default: ~/.pagemon_urls)
-.TP
-.B \-i, \--interval \fIminutes\fR
-Set the interval between checks (default is 5 minutes).
-.TP
-.B \-t, \--threshold \fIpercentage\fR
-Set the threshold percentage for detecting changes. Higher values mean fewer notifications for minor changes. (default: 5%)
-.TP
-.B \-c, \--config \fIconfig_file\fR
-Specify a custom configuration file. (default: ~/.pagemonrc)
+.B \-c, \--config \fI<config_file>\fR
+Specify a custom configuration file.
 .TP
 .B \-I, \--init
 Initialize the configuration file.
@@ -38,12 +33,28 @@ Show the configuration settings.
 .TP
 .B \-S, \--show-config-file
 Show the configuration file.
+
+.SS URL Management
+.TP
+.B \-f, \--url-file \fI<file>\fR
+Specify a file containing a list of URLs to monitor.
 .TP
 .B \-U, \--list-urls
 List all watched URLs.
 .TP
 .B \-C, \--clean
 Delete all cached files.
+
+.SS Execution Options
+.TP
+.B \-i, \--interval \fI<minutes>\fR
+Set the interval between checks (default is 5 minutes).
+.TP
+.B \-t, \--threshold \fI<percentage>\fR
+Set the threshold percentage for detecting changes (default: 5%).
+.TP
+.B [INT]<url>
+Specify a threshold for a specific URL. This overrides the global threshold setting.
 .TP
 .B \-b, \--background
 Run the script in the background.
@@ -51,14 +62,16 @@ Run the script in the background.
 .B \-p, \--pushover
 Send Pushover notifications.
 .TP
-.B \-a, \--api-token \fItoken\fR
+.B \-a, \--api-token \fI<token>\fR
 Specify the API token for Pushover notifications.
 .TP
-.B \-u, \--user-key \fIkey\fR
+.B \-u, \--user-key \fI<key>\fR
 Specify the user key for Pushover notifications.
 .TP
 .B \-d, \--desktop
 Send desktop notifications using AppleScript.
+
+.SS Logging and Output
 .TP
 .B \-v, \--verbose
 Enable verbose output.
@@ -66,16 +79,18 @@ Enable verbose output.
 .B \-l, \--log
 Log the log file to the screen.
 .TP
-.B \-o, \--output \fIfile\fR
+.B \-o, \--output \fI<file>\fR
 Specify a custom log file location.
 .TP
-.B \-L, \--log-level \fIlevel\fR
+.B \-L, \--log-level \fI<level>\fR
 Set the log level (FATAL, ERROR, WARN, INFO, DEBUG, TRACE).
+
+.SS Process Management
 .TP
 .B \-K, \--killall
 Kill all running instances of the script.
 .TP
-.B \-k, \--kill \fIpid\fR
+.B \-k, \--kill \fI<pid>\fR
 Kill a specific instance of the script by PID.
 .TP
 .B \-P, \--list-pids
@@ -83,23 +98,11 @@ List all running instances of the script.
 
 .SH EXAMPLES
 .TP
-.B pagemon http://example.com
-Monitor the specified URL for changes.
+.B pagemon \-i 10 \-t 10 http://example.com
+Monitor http://example.com every 10 minutes and notify if changes exceed 10%.
 .TP
-.B pagemon \-f urls.txt
-Monitor URLs listed in the specified file.
-.TP
-.B pagemon \-i 10
-Set the interval between checks to 10 minutes.
-.TP
-.B pagemon \-t 10
-Set the threshold percentage for detecting changes to 10%.
-.TP
-.B pagemon \-c custom_config.rc
-Use a custom configuration file.
-.TP
-.B pagemon \-b
-Run the script in the background.
+.B pagemon \-f urls.txt \-p \-a YOUR_API_TOKEN \-u YOUR_USER_KEY
+Monitor URLs listed in urls.txt and send Pushover notifications.
 
 .SH AUTHOR
 John Smith III
@@ -108,9 +111,4 @@ John Smith III
 MIT License
 
 .SH SEE ALSO
-.BR curl (1),
-.BR md5sum (1),
-.BR sed (1),
-.BR awk (1),
-.BR xmllint (1),
-.BR osascript (1)
+curl(1), md5sum(1), diff(1)

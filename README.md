@@ -129,6 +129,7 @@ PageMon uses a configuration file to store default settings. The default locatio
 
 - `-i, --interval <minutes>`: Set the interval between checks (default is 5 minutes).
 - `-t, --threshold <percentage>`: Set the threshold percentage for detecting changes (default: 5%).
+- `[INT]<url>`: Specify a threshold for a specific URL. This overrides the global threshold setting.
 - `-b, --background`: Run the script in the background.
 - `-p, --pushover`: Send Pushover notifications.
 - `-a, --api-token <token>`: Specify the API token for Pushover notifications.
